@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Batch ball mill simulation</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--page:#ffffff;--text-primary:#1f1e1d;--text-secondary:#5f5e5a;--text-muted:#888780;--t:#5f5e5a;
+--surface-1:#f3f2ec;--border-strong:rgba(0,0,0,.35);--grid:rgba(0,0,0,.12);--band:rgba(99,153,34,.18);--text-success:#3b6d11;--text-warning:#854f0b;--radius:8px}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--page:#1f1e1d;--text-primary:#f1efe8;--text-secondary:#c2c0b6;--text-muted:#9c9a92;--t:#b4b2a9;--surface-1:#2c2c2a;--border-strong:rgba(255,255,255,.4);--grid:rgba(255,255,255,.14);--band:rgba(99,153,34,.28);--text-success:#c0dd97;--text-warning:#fac775}}
+:root[data-theme="dark"]{--page:#1f1e1d;--text-primary:#f1efe8;--text-secondary:#c2c0b6;--text-muted:#9c9a92;--t:#b4b2a9;--surface-1:#2c2c2a;--border-strong:rgba(255,255,255,.4);--grid:rgba(255,255,255,.14);--band:rgba(99,153,34,.28);--text-success:#c0dd97;--text-warning:#fac775}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--page);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.5}
+.page{max-width:760px;margin:0 auto;padding:12px 16px 32px}
+h1{font-size:20px;font-weight:500;margin:0 0 2px}
+.sub{font-size:13px;color:var(--text-secondary);margin:0 0 12px}
+svg text{font-family:inherit}
+.ts{font-size:12px;fill:var(--text-secondary)}
+.th{font-size:14px;font-weight:500;fill:var(--text-primary)}
+.arr{stroke:var(--t);stroke-width:1.5;fill:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{0%{transform:translate(0,0);opacity:0}12%{opacity:1}85%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}
+@media (prefers-reduced-motion: no-preference){
+.spin{transform-origin:510px 152px;transform-box:view-box;animation:spin var(--sp,6s) linear infinite}
+.cas{animation:drift var(--cd,1.3s) ease-in infinite}
+}
+.ctl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);margin-top:8px}
+.ctl span:first-child{min-width:112px}
+input[type=range]{flex:1;accent-color:#378add}
+.mrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.m{background:var(--surface-1);border-radius:var(--radius);padding:8px 10px}
+.m .l{font-size:12px;color:var(--text-secondary)}
+.m .v{font-size:18px;font-weight:500}
+.m .s{font-size:11px;color:var(--text-muted)}
+.note{font-size:13px;color:var(--text-secondary);margin:6px 0 0}
+.zoombar{position:sticky;top:0;z-index:10;display:flex;justify-content:flex-end;padding:6px 10px 0;pointer-events:none}
+.zpill{pointer-events:auto;display:flex;align-items:center;gap:4px;background:var(--surface-1);border:0.5px solid var(--border-strong);border-radius:999px;padding:2px 8px;color:var(--text-secondary);font-size:10px}
+.zpill button{width:19px;height:19px;border-radius:50%;border:0.5px solid var(--border-strong);background:var(--page);color:var(--text-primary);font-size:13px;line-height:1;cursor:pointer;padding:0}
+.zpill input{width:88px;flex:none}
+#zo{min-width:28px;text-align:right}
+@media (max-width:520px){.mrow{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="zoombar"><div class="zpill"><svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><button type="button" id="zm" aria-label="Zoom out">&minus;</button><input type="range" id="zr" min="50" max="120" step="5" value="90" aria-label="Page zoom"><button type="button" id="zp" aria-label="Zoom in">+</button><span id="zo">90%</span></div></div>
+<div class="page">
+<h1>Batch ball mill (MTD) for ceramic slip</h1>
+<p class="sub">Alumina balls grind the slip as the drum turns. Move the sliders to see the motor current and the slip residue.</p>
+<svg id="mill" width="100%" viewBox="0 0 680 304" role="img" style="display:block">
+<title>Batch ball mill with alumina balls and slip</title>
+<desc>Side view of the drum with its inverter, motor and drive, and a cross-section showing the alumina ball charge, slip, and cascading balls.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<pattern id="balls" width="18" height="15.6" patternUnits="userSpaceOnUse"><circle cx="4.5" cy="4" r="4" fill="#EDE6D3" stroke="#9C9484" stroke-width="0.6"/><circle cx="13.5" cy="11.8" r="4" fill="#EDE6D3" stroke="#9C9484" stroke-width="0.6"/></pattern>
+<clipPath id="cl"><path id="bedc" d=""/></clipPath>
+</defs>
+
+<rect x="10" y="20" width="96" height="52" rx="4" fill="var(--surface-1)" stroke="var(--t)" stroke-width="0.5"/>
+<text class="ts" x="58" y="38" text-anchor="middle">Inverter</text>
+<text class="th" id="t-hz" x="58" y="60" text-anchor="middle">43 Hz</text>
+<line x1="58" y1="72" x2="58" y2="106" class="arr" marker-end="url(#arrow)"/>
+<rect x="10" y="108" width="96" height="76" rx="4" fill="var(--surface-1)" stroke="var(--t)" stroke-width="0.5"/>
+<text class="ts" x="58" y="123" text-anchor="middle">Motor 200 kW</text>
+<text class="th" id="t-amp" x="58" y="141" text-anchor="middle">310 A</text>
+<text class="th" id="t-kw" x="58" y="159" text-anchor="middle">149 kW</text>
+<text class="ts" id="t-load" x="58" y="177" text-anchor="middle">100% of normal</text>
+<line x1="106" y1="140" x2="140" y2="140" stroke="var(--t)" stroke-width="4"/>
+<text class="ts" x="123" y="132" text-anchor="middle">Drive</text>
+
+<rect x="140" y="100" width="200" height="110" rx="14" fill="var(--surface-1)" stroke="var(--t)" stroke-width="1.5"/>
+<rect id="sslur" x="146" y="150" width="188" height="58" rx="8" fill="#C9B08A"/>
+<rect id="sbed" x="146" y="150" width="188" height="58" rx="8" fill="url(#balls)"/>
+<rect x="225" y="92" width="30" height="9" rx="2" fill="var(--surface-1)" stroke="var(--t)" stroke-width="1"/>
+<path d="M170 88Q240 58 310 88" class="arr" marker-end="url(#arrow)"/>
+<text class="ts" x="240" y="62" text-anchor="middle">Rotation</text>
+<circle cx="185" cy="222" r="11" fill="none" stroke="var(--t)" stroke-width="1.2"/>
+<circle cx="295" cy="222" r="11" fill="none" stroke="var(--t)" stroke-width="1.2"/>
+<line x1="140" y1="233" x2="340" y2="233" stroke="var(--t)" stroke-width="1.2"/>
+<text class="th" x="240" y="256" text-anchor="middle">MTD batch mill</text>
+<text class="ts" x="240" y="272" text-anchor="middle">side view, cutaway</text>
+
+<circle cx="510" cy="152" r="134" fill="var(--surface-1)" stroke="var(--t)" stroke-width="2.5"/>
+<g class="spin" id="spin">
+<circle cx="510" cy="152" r="122" fill="none" stroke="#7C7A74" stroke-width="8" stroke-dasharray="14 3"/>
+<g id="lift" stroke="#5F5E5A" stroke-width="4" stroke-linecap="round"></g>
+<circle cx="510" cy="30" r="4" fill="#D85A30"/>
+</g>
+<circle cx="510" cy="152" r="115" fill="none" stroke="var(--t)" stroke-width="0.5"/>
+<g id="bedg"><path id="bedp" d="" fill="#C9B08A"/><rect x="370" y="10" width="280" height="290" fill="url(#balls)" clip-path="url(#cl)"/></g>
+<g id="cas"></g>
+<text class="th" id="t-balls" x="510" y="96" text-anchor="middle">Alumina balls 29%</text>
+<text class="ts" x="510" y="116" text-anchor="middle">slip fills the gaps</text>
+<text class="ts" x="510" y="298" text-anchor="middle">Cross-section</text>
+</svg>
+
+<div class="ctl"><span>Mill speed</span><input type="range" id="sf" min="30" max="50" step="1" value="43" oninput="update()" aria-label="Mill inverter frequency"><span id="sf-o" style="min-width:56px;text-align:right">43 Hz</span></div>
+<div class="ctl"><span>Alumina ball level</span><input type="range" id="sj" min="25" max="45" step="1" value="29" oninput="update()" aria-label="Alumina ball level"><span id="sj-o" style="min-width:56px;text-align:right">29%</span></div>
+<div class="ctl"><span>Milling time</span><input type="range" id="st" min="3.5" max="6.5" step="0.1" value="5" oninput="update()" aria-label="Milling time"><span id="st-o" style="min-width:56px;text-align:right">5.0 h</span></div>
+
+<div class="mrow">
+<div class="m"><div class="l">Motor current</div><div class="v" id="m-a">310 A</div><div class="s" id="m-as">normal 310 A at 43 Hz, limit 340 A</div></div>
+<div class="m"><div class="l">Estimated power</div><div class="v" id="m-p">149 kW</div><div class="s" id="m-ps">75% of 200 kW motor</div></div>
+<div class="m"><div class="l">Estimated energy</div><div class="v" id="m-e">745 kWh</div><div class="s">per batch, power × milling time</div></div>
+<div class="m"><div class="l">Slip residue</div><div class="v" id="m-r">6.9%</div><div class="s" id="m-rs">in range 6.0 to 8.0%</div></div>
+</div>
+
+<div style="font-size:12px;color:var(--text-secondary);margin:14px 0 2px">Slip residue over milling time at the current speed and ball level</div>
+<svg id="ch" width="100%" viewBox="0 0 360 135" role="img" style="display:block;max-width:520px">
+<title>Slip residue versus milling time</title>
+<rect x="40" y="60" width="300" height="25" fill="var(--band)"/>
+<g stroke="var(--grid)" stroke-width="0.5"><line x1="40" y1="110" x2="340" y2="110"/><line x1="40" y1="85" x2="340" y2="85"/><line x1="40" y1="60" x2="340" y2="60"/><line x1="40" y1="35" x2="340" y2="35"/><line x1="40" y1="10" x2="340" y2="10"/></g>
+<text class="ts" x="34" y="113" text-anchor="end" style="font-size:10px">4</text><text class="ts" x="34" y="88" text-anchor="end" style="font-size:10px">6</text><text class="ts" x="34" y="63" text-anchor="end" style="font-size:10px">8</text><text class="ts" x="34" y="38" text-anchor="end" style="font-size:10px">10</text><text class="ts" x="34" y="13" text-anchor="end" style="font-size:10px">12</text>
+<text class="ts" x="40" y="126" text-anchor="middle" style="font-size:10px">3.5 h</text><text class="ts" x="140" y="126" text-anchor="middle" style="font-size:10px">4.5 h</text><text class="ts" x="240" y="126" text-anchor="middle" style="font-size:10px">5.5 h</text><text class="ts" x="340" y="126" text-anchor="middle" style="font-size:10px">6.5 h</text>
+<text class="ts" x="344" y="56" style="font-size:10px;fill:var(--text-success)">target</text>
+<polyline id="curve" points="" fill="none" stroke="#378ADD" stroke-width="2"/>
+<circle id="mk" cx="0" cy="0" r="4" fill="#D85A30"/>
+<text class="th" id="mkt" x="0" y="0" text-anchor="middle" style="font-size:12px">6.9%</text>
+</svg>
+
+<p id="n1" class="note"></p>
+<p id="n2" class="note"></p>
+<p id="n3" class="note"></p>
+<p style="font-size:11px;color:var(--text-muted);margin:8px 0 0">Estimated values from a simple illustrative model anchored on 310 A and 6.9% residue at 43 Hz, 29% balls and 5 h. Power assumes V/f control and a 0.85 power factor. Limits are 95% of the 200 kW rating (190 kW), which is about 340 A at 380 V. Energy is power times milling time. Not measured data.</p>
+</div>
+<script>
+var CX=510,CY=152,RI=115,NS='http://www.w3.org/2000/svg';
+function $(id){return document.getElementById(id);}
+function mk(t,a,p){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);p.appendChild(e);return e;}
+function g(J){return J*(1-1.065*J);}
+var G0=g(0.29);
+function dOf(J){var lo=0,hi=0.99;for(var i=0;i<40;i++){var u=(lo+hi)/2;var F=(Math.acos(u)-u*Math.sqrt(1-u*u))/Math.PI;if(F>J)lo=u;else hi=u;}return (lo+hi)/2*RI;}
+function Rf(f,J,t){var k=0.18*Math.pow(f/43,1.2)*Math.pow(g(J)/G0,0.8);return 6.9*Math.exp(0.9-k*t);}
+function mixc(c1,c2,t){t=Math.max(0,Math.min(1,t));var o='#';for(var i=0;i<3;i++){var a=parseInt(c1.substr(1+2*i,2),16),b=parseInt(c2.substr(1+2*i,2),16);var v=Math.round(a+(b-a)*t).toString(16);o+=(v.length<2?'0':'')+v;}return o;}
+var lift=$('lift');
+for(var i=0;i<12;i++){var an=i*Math.PI/6;mk('line',{x1:(CX+108*Math.cos(an)).toFixed(1),y1:(CY+108*Math.sin(an)).toFixed(1),x2:(CX+117*Math.cos(an)).toFixed(1),y2:(CY+117*Math.sin(an)).toFixed(1)},lift);}
+var cas=[];
+for(var i=0;i<7;i++){var c=mk('circle',{r:4.5,fill:'#EDE6D3',stroke:'#9C9484','stroke-width':'0.6','class':'cas'},$('cas'));c.style.animationDelay=(-Math.random()*1.3).toFixed(2)+'s';cas.push({el:c,p:0.05+Math.random()*0.5});}
+function update(){
+var f=+$('sf').value,J=+$('sj').value/100,t=+$('st').value;
+$('sf-o').textContent=f+' Hz';$('sj-o').textContent=Math.round(J*100)+'%';$('st-o').textContent=t.toFixed(1)+' h';
+$('t-hz').textContent=f+' Hz';$('t-balls').textContent='Alumina balls '+Math.round(J*100)+'%';
+var d=dOf(J),w=Math.sqrt(RI*RI-d*d),y=CY+d,th=20+0.7*(f-30);
+var pd='M'+(CX-w).toFixed(1)+' '+y.toFixed(1)+'L'+(CX+w).toFixed(1)+' '+y.toFixed(1)+'A'+RI+' '+RI+' 0 0 1 '+(CX-w).toFixed(1)+' '+y.toFixed(1)+'Z';
+$('bedp').setAttribute('d',pd);$('bedc').setAttribute('d',pd);
+$('bedg').setAttribute('transform','rotate('+(-th).toFixed(1)+' '+CX+' '+CY+')');
+var ph=-th*Math.PI/180,c=Math.cos(ph),s=Math.sin(ph);
+function rot(x,yy){var dx=x-CX,dy=yy-CY;return [CX+dx*c-dy*s,CY+dx*s+dy*c];}
+var S=rot(CX+w,y),T=rot(CX-w,y),vx=T[0]-S[0],vy=T[1]-S[1],vl=Math.hypot(vx,vy),nx=-vy/vl,ny=vx/vl;
+cas.forEach(function(o){o.el.setAttribute('cx',(S[0]+vx*o.p+nx*7).toFixed(1));o.el.setAttribute('cy',(S[1]+vy*o.p+ny*7).toFixed(1));o.el.style.setProperty('--dx',(vx*0.38).toFixed(1)+'px');o.el.style.setProperty('--dy',(vy*0.38).toFixed(1)+'px');});
+var hb=(RI-d)/(2*RI)*108;
+$('sbed').setAttribute('y',(208-hb).toFixed(1));$('sbed').setAttribute('height',hb.toFixed(1));
+$('sslur').setAttribute('y',(208-hb).toFixed(1));$('sslur').setAttribute('height',hb.toFixed(1));
+var root=$('mill');
+root.style.setProperty('--sp',(258/f).toFixed(2)+'s');
+root.style.setProperty('--cd',(56/f).toFixed(2)+'s');
+var I=310*(g(J)/G0)*(1+0.012*(f-43));
+var V=380*Math.min(f,50)/50,P=1.732*V*I*0.85/1000;
+var IMAX=340,PMAX=190,overI=I>IMAX,overP=P>PMAX,RED='#E24B4A';
+var ma=$('m-a');ma.textContent=Math.round(I)+' A';ma.style.color=overI?RED:'';
+$('m-as').textContent=overI?'over the 340 A limit':'normal 310 A at 43 Hz, limit 340 A';
+var ta=$('t-amp');ta.textContent=Math.round(I)+' A';ta.style.fill=overI?RED:'';
+var tp=$('t-kw');tp.textContent=Math.round(P)+' kW';tp.style.fill=overP?RED:'';
+$('t-load').textContent=Math.round(I/310*100)+'% of normal';
+var mp=$('m-p');mp.textContent=Math.round(P)+' kW';mp.style.color=overP?RED:'';
+$('m-ps').textContent=overP?'over the 190 kW limit (95% of 200 kW)':Math.round(P/2)+'% of 200 kW, limit 190 kW';
+$('m-e').textContent=Math.round(P*t).toLocaleString('en-US')+' kWh';
+var R=Rf(f,J,t),ok=R>=6&&R<=8;
+var mr=$('m-r');mr.textContent=R.toFixed(1)+'%';mr.style.color=ok?'var(--text-success)':'var(--text-warning)';
+$('m-rs').textContent=ok?'in range 6.0 to 8.0%':(R>8?'too coarse, target 6.0 to 8.0%':'too fine, target 6.0 to 8.0%');
+var col=mixc('#B59A74','#DCCBAA',(9-R)/4);
+$('bedp').setAttribute('fill',col);$('sslur').setAttribute('fill',col);
+function X(tt){return 40+(tt-3.5)/3*300;}
+function Y(r){return 110-(Math.min(Math.max(r,4),12)-4)/8*100;}
+var pts=[];for(var q=3.5;q<=6.501;q+=0.1)pts.push(X(q).toFixed(1)+','+Y(Rf(f,J,q)).toFixed(1));
+$('curve').setAttribute('points',pts.join(' '));
+var mx=X(t),my=Y(R);
+$('mk').setAttribute('cx',mx.toFixed(1));$('mk').setAttribute('cy',my.toFixed(1));
+$('mkt').setAttribute('x',Math.min(mx,330).toFixed(1));$('mkt').setAttribute('y',(my<24?my+17:my-8).toFixed(1));$('mkt').textContent=R.toFixed(1)+'%';
+var n1,n2,n3;
+if(f>=46)n1='High speed: faster grinding and higher current, but more wear on liners and balls.';
+else if(f<=36)n1='Low speed: slower grinding and lower current, and the balls cascade less.';
+else n1='Speed near normal: balanced grinding and current.';
+if(J>=0.4)n2='High ball level: more grinding contacts and a higher current, with less room for slip. Check the motor load.';
+else if(J<=0.3)n2='Low ball level: lower current and slower grinding, with more room for slip.';
+else n2='Ball level near normal (28 to 30%).';
+if(t>=5.8)n3='Long milling: finer slip and lower residue. Watch for over-milling and higher viscosity.';
+else if(t<=4.2)n3='Short milling: the slip is still coarse, so the residue stays high.';
+else n3='Milling time near normal (about 5 hours).';
+$('n1').textContent=n1;$('n2').textContent=n2;$('n3').textContent=n3;
+}
+function setZoom(z){z=Math.max(50,Math.min(120,z));$('zr').value=z;$('zo').textContent=z+'%';document.querySelector('.page').style.zoom=(z/90).toFixed(3);}
+$('zr').addEventListener('input',function(){setZoom(+this.value);});
+$('zm').onclick=function(){setZoom(+$('zr').value-5);};
+$('zp').onclick=function(){setZoom(+$('zr').value+5);};
+update();
+</script>
+</body>
+</html>
